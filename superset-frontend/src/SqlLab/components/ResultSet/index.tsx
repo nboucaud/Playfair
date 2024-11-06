@@ -23,6 +23,7 @@ import {
   memo,
   ChangeEvent,
   MouseEvent,
+  useMemo,
 } from 'react';
 
 import { shallowEqual, useDispatch, useSelector } from 'react-redux';
@@ -208,6 +209,10 @@ const ResultSet = ({
   const [cachedData, setCachedData] = useState<Record<string, unknown>[]>([]);
   const [showSaveDatasetModal, setShowSaveDatasetModal] = useState(false);
   const [alertIsOpen, setAlertIsOpen] = useState(false);
+  const orderedColumnKeys = useMemo(
+    () => query.results?.columns.map(col => col.column_name),
+    [query.results?.columns],
+  );
 
   const history = useHistory();
   const dispatch = useDispatch();
@@ -691,7 +696,7 @@ const ResultSet = ({
           <ResultTable
             data={data}
             queryId={query.id}
-            orderedColumnKeys={results.columns.map(col => col.column_name)}
+            orderedColumnKeys={orderedColumnKeys}
             height={rowsHeight}
             filterText={searchText}
             expandedColumns={expandedColumns}
