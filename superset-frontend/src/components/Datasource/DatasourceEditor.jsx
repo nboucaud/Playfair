@@ -752,7 +752,7 @@ class DatasourceEditor extends PureComponent {
     return results;
   }
 
-  syncMetadata() {
+  syncMetadata() { // TODO replicate function and hoist to parent. Might involve hoisting state as well
     const { datasource } = this.state;
     const params = {
       datasource_type: datasource.type || datasource.datasource_type,
