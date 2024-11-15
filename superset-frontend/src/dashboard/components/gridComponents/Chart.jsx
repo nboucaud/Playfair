@@ -20,8 +20,10 @@ import cx from 'classnames';
 import { useCallback, useEffect, useRef, useMemo, useState, memo } from 'react';
 import PropTypes from 'prop-types';
 import { styled, t, logging } from '@superset-ui/core';
-import { debounce, isEqual } from 'lodash';
-import { useHistory, withRouter } from 'react-router-dom';
+import { debounce } from 'lodash';
+import { useHistory } from 'react-router-dom';
+import { bindActionCreators } from 'redux';
+import { useDispatch, useSelector } from 'react-redux';
 
 import { exportChart, mountExploreUrl } from 'src/explore/exploreUtils';
 import ChartContainer from 'src/components/Chart/ChartContainer';
@@ -32,16 +34,11 @@ import {
   LOG_ACTIONS_EXPORT_XLSX_DASHBOARD_CHART,
   LOG_ACTIONS_FORCE_REFRESH_CHART,
 } from 'src/logger/LogUtils';
-import { areObjectsEqual } from 'src/reduxUtils';
 import { postFormData } from 'src/explore/exploreUtils/formData';
 import { URL_PARAMS } from 'src/constants';
 
 import SliceHeader from '../SliceHeader';
 import MissingChart from '../MissingChart';
-import { slicePropShape, chartPropShape } from '../../util/propShapes';
-import { useDispatch, useSelector } from 'react-redux';
-import { bindActionCreators } from 'redux';
-import { updateComponents } from '../../actions/dashboardLayout';
 import {
   addDangerToast,
   addSuccessToast,
@@ -76,10 +73,6 @@ const propTypes = {
 // we use state + shouldComponentUpdate() logic to prevent perf-wrecking
 // resizing across all slices on a dashboard on every update
 const RESIZE_TIMEOUT = 500;
-const SHOULD_UPDATE_ON_PROP_CHANGES = Object.keys(propTypes).filter(
-  prop =>
-    prop !== 'width' && prop !== 'height' && prop !== 'isComponentVisible',
-);
 const DEFAULT_HEADER_HEIGHT = 22;
 
 const ChartWrapper = styled.div`
@@ -106,7 +99,7 @@ const SliceContainer = styled.div`
 
 const EMPTY_OBJECT = {};
 
-export const Chart = props => {
+const Chart = props => {
   const dispatch = useDispatch();
   const descriptionRef = useRef(null);
   const headerRef = useRef(null);
@@ -194,11 +187,12 @@ export const Chart = props => {
     }
   }, [isExpanded]);
 
-  useEffect(() => {
-    return () => {
+  useEffect(
+    () => () => {
       resize.cancel();
-    };
-  }, []);
+    },
+    [],
+  );
 
   useEffect(() => {
     resize();
@@ -494,7 +488,7 @@ export const Chart = props => {
         <ChartContainer
           width={width}
           height={getChartHeight()}
-          addFilter={boundActionCreators.changeFilter}
+          addFilter={addFilter}
           onFilterMenuOpen={handleFilterMenuOpen}
           onFilterMenuClose={handleFilterMenuClose}
           annotationData={chart.annotationData}
