@@ -86,6 +86,9 @@ RUN rm /app/superset/translations/*/LC_MESSAGES/*.po
 RUN rm /app/superset/translations/messages.pot
 
 FROM python:${PY_VER} AS python-base
+RUN --mount=type=cache,target=/root/.cache/pip \
+    pip install --no-cache-dir uv \
+    && uv pip install --system --no-cache-dir --upgrade setuptools pip
 ######################################################################
 # Final lean image...
 ######################################################################
@@ -104,29 +107,37 @@ ENV LANG=C.UTF-8 \
     SUPERSET_HOME="/app/superset_home" \
     SUPERSET_PORT=8088
 
+# Set apt one-at-a-time to allow for lower memory consumption
+RUN echo 'Acquire::Queue-Mode "access";' > /etc/apt/apt.conf.d/99single;
+
 RUN mkdir -p ${PYTHONPATH} superset/static requirements superset-frontend apache_superset.egg-info requirements \
     && useradd --user-group -d ${SUPERSET_HOME} -m --no-log-init --shell /bin/bash superset \
     && apt-get update -qq && apt-get install -yqq --no-install-recommends \
         curl \
-        libsasl2-dev \
-        libsasl2-modules-gssapi-mit \
-        libpq-dev \
-        libecpg-dev \
-        libldap2-dev \
     && touch superset/static/version_info.json \
     && chown -R superset:superset ./* \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN apt-get update -qq && apt-get install -yqq --no-install-recommends \
+        libsasl2-dev \
+        libsasl2-modules-gssapi-mit \
+    && rm -rf /var/lib/apt/lists/*
+RUN apt-get update -qq && apt-get install -yqq --no-install-recommends \
+        libpq-dev \
+        libecpg-dev \
+    && rm -rf /var/lib/apt/lists/*
+RUN apt-get update -qq && apt-get install -yqq --no-install-recommends \
+        libldap2-dev \
     && rm -rf /var/lib/apt/lists/*
 
 COPY --chown=superset:superset pyproject.toml setup.py MANIFEST.in README.md ./
 # setup.py uses the version information in package.json
 COPY --chown=superset:superset superset-frontend/package.json superset-frontend/
 COPY --chown=superset:superset requirements/base.txt requirements/
-COPY --chown=superset:superset scripts/check-env.py scripts/
 RUN --mount=type=cache,target=/root/.cache/pip \
     apt-get update -qq && apt-get install -yqq --no-install-recommends \
       build-essential \
-    && pip install --no-cache-dir --upgrade setuptools pip \
-    && pip install --no-cache-dir -r requirements/base.txt \
+    && uv pip install --system --no-cache-dir -r requirements/base.txt \
     && apt-get autoremove -yqq --purge build-essential \
     && rm -rf /var/lib/apt/lists/*
 
@@ -136,7 +147,7 @@ COPY --chown=superset:superset --from=superset-node /app/superset/static/assets 
 ## Lastly, let's install superset itself
 COPY --chown=superset:superset superset superset
 RUN --mount=type=cache,target=/root/.cache/pip \
-    pip install --no-cache-dir -e .
+    uv pip install --system --no-cache-dir -e .
 
 # Copy the .json translations from the frontend layer
 COPY --chown=superset:superset --from=superset-node /app/superset/translations superset/translations
@@ -171,36 +182,43 @@ RUN apt-get update -qq \
     && apt-get install -yqq --no-install-recommends \
         libnss3 \
         libdbus-glib-1-2 \
-        libgtk-3-0 \
+        && rm -rf /var/lib/apt/lists/*
+RUN apt-get update -qq && apt-get install -yqq --no-install-recommends \
         libx11-xcb1 \
         libasound2 \
-        libxtst6 \
+        libgtk-3-0 \
+    && rm -rf /var/lib/apt/lists/*
+RUN apt-get update -qq && apt-get install -yqq --no-install-recommends \
         git \
         pkg-config \
-        && rm -rf /var/lib/apt/lists/*
+        libxtst6 \
+    && rm -rf /var/lib/apt/lists/*
 
-RUN --mount=type=cache,target=/root/.cache/pip \
-    pip install --no-cache-dir playwright
-RUN playwright install-deps
-
-RUN if [ "$INCLUDE_CHROMIUM" = "true" ]; then \
-        playwright install chromium; \
-    else \
-        echo "Skipping translations in dev mode"; \
-    fi
-
-# Install GeckoDriver WebDriver
+########################################################
+# Installing headless browsers if needed
+########################################################
 ARG GECKODRIVER_VERSION=v0.34.0 \
     FIREFOX_VERSION=125.0.3
 
-RUN if [ "$INCLUDE_FIREFOX" = "true" ]; then \
-        apt-get update -qq \
-        && apt-get install -yqq --no-install-recommends wget bzip2 \
-        && wget -q https://github.com/mozilla/geckodriver/releases/download/${GECKODRIVER_VERSION}/geckodriver-${GECKODRIVER_VERSION}-linux64.tar.gz -O - | tar xfz - -C /usr/local/bin \
-        && wget -q https://download-installer.cdn.mozilla.net/pub/firefox/releases/${FIREFOX_VERSION}/linux-x86_64/en-US/firefox-${FIREFOX_VERSION}.tar.bz2 -O - | tar xfj - -C /opt \
-        && ln -s /opt/firefox/firefox /usr/local/bin/firefox \
-        && apt-get autoremove -yqq --purge wget bzip2 && rm -rf /var/[log,tmp]/* /tmp/* /var/lib/apt/lists/*; \
+RUN if [ "$INCLUDE_CHROMIUM" = "true" ] || [ "$INCLUDE_FIREFOX" = "true" ]; then \
+      --mount=type=cache,target=/root/.cache/pip \
+      uv pip install --system --no-cache-dir playwright; \
+    else \
+      echo "Skipping Playwright installation"; \
     fi
+
+RUN if [ "$INCLUDE_CHROMIUM" = "true" ]; then \
+        playwright install chromium --with-deps; \
+    else \
+        echo "Skipping Chromium installation"; \
+    fi
+
+RUN if [ "$INCLUDE_FIREFOX" = "true" ]; then \
+      playwright install firefox --with-deps; \
+    else \
+      echo "Skipping Firefox installation"; \
+    fi
+########################################################
 
 # Installing mysql client os-level dependencies in dev image only because GPL
 RUN apt-get install -yqq --no-install-recommends \
@@ -208,10 +226,11 @@ RUN apt-get install -yqq --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 COPY --chown=superset:superset requirements/development.txt requirements/
+COPY --chown=superset:superset scripts/check-env.py scripts/
 RUN --mount=type=cache,target=/root/.cache/pip \
     apt-get update -qq && apt-get install -yqq --no-install-recommends \
       build-essential \
-    && pip install --no-cache-dir -r requirements/development.txt \
+    && uv pip install --system --no-cache-dir -r requirements/development.txt \
     && apt-get autoremove -yqq --purge build-essential \
     && rm -rf /var/lib/apt/lists/*
 
