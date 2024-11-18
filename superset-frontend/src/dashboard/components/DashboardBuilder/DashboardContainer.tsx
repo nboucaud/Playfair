@@ -18,7 +18,7 @@
  */
 // ParentSize uses resize observer so the dashboard will update size
 // when its container size changes, due to e.g., builder side panel opening
-import { FC, useEffect, useMemo, useRef } from 'react';
+import { FC, memo, useEffect, useMemo, useRef } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import {
   Filter,
@@ -44,6 +44,7 @@ import { getChartIdsInFilterScope } from 'src/dashboard/util/getChartIdsInFilter
 import findTabIndexByComponentId from 'src/dashboard/util/findTabIndexByComponentId';
 import { setInScopeStatusOfFilters } from 'src/dashboard/actions/nativeFilters';
 import { updateDashboardLabelsColor } from 'src/dashboard/actions/dashboardState';
+import { useChartIds } from 'src/dashboard/util/charts/useChartIds';
 import {
   applyColors,
   getColorNamespace,
@@ -85,9 +86,7 @@ const DashboardContainer: FC<DashboardContainerProps> = ({ topLevelTabs }) => {
   const directPathToChild = useSelector<RootState, string[]>(
     state => state.dashboardState.directPathToChild,
   );
-  const chartIds = useSelector<RootState, number[]>(state =>
-    Object.values(state.charts).map(chart => chart.id),
-  );
+  const chartIds = useChartIds();
 
   const prevTabIndexRef = useRef();
   const tabIndex = useMemo(() => {
@@ -216,4 +215,4 @@ const DashboardContainer: FC<DashboardContainerProps> = ({ topLevelTabs }) => {
   );
 };
 
-export default DashboardContainer;
+export default memo(DashboardContainer);

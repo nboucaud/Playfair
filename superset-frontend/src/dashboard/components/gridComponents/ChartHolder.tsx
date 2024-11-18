@@ -16,7 +16,7 @@
  * specific language governing permissions and limitations
  * under the License.
  */
-import { useState, useMemo, useCallback, useEffect } from 'react';
+import { useState, useMemo, useCallback, useEffect, memo } from 'react';
 
 import { ResizeCallback, ResizeStartCallback } from 're-resizable';
 import cx from 'classnames';
@@ -24,7 +24,7 @@ import { useSelector } from 'react-redux';
 import { css, useTheme } from '@superset-ui/core';
 import { LayoutItem, RootState } from 'src/dashboard/types';
 import AnchorLink from 'src/dashboard/components/AnchorLink';
-import Chart from 'src/dashboard/containers/Chart';
+import Chart from 'src/dashboard/components/gridComponents/Chart';
 import DeleteComponentButton from 'src/dashboard/components/DeleteComponentButton';
 import { Draggable } from 'src/dashboard/components/dnd/DragDroppable';
 import HoverMenu from 'src/dashboard/components/menu/HoverMenu';
@@ -107,9 +107,13 @@ const ChartHolder: React.FC<ChartHolderProps> = ({
   const isFullSize = fullSizeChartId === chartId;
 
   const focusHighlightStyles = useFilterFocusHighlightStyles(chartId);
-  const dashboardState = useSelector(
-    (state: RootState) => state.dashboardState,
+  const directPathToChild = useSelector(
+    (state: RootState) => state.dashboardState.directPathToChild,
   );
+  const directPathLastUpdated = useSelector(
+    (state: RootState) => state.dashboardState.directPathLastUpdated ?? 0,
+  );
+
   const [extraControls, setExtraControls] = useState<Record<string, unknown>>(
     {},
   );
@@ -118,18 +122,8 @@ const ChartHolder: React.FC<ChartHolderProps> = ({
   const [currentDirectPathLastUpdated, setCurrentDirectPathLastUpdated] =
     useState(0);
 
-  const directPathToChild = useMemo(
-    () => dashboardState?.directPathToChild ?? [],
-    [dashboardState],
-  );
-
-  const directPathLastUpdated = useMemo(
-    () => dashboardState?.directPathLastUpdated ?? 0,
-    [dashboardState],
-  );
-
   const infoFromPath = useMemo(
-    () => getChartAndLabelComponentIdFromPath(directPathToChild) as any,
+    () => getChartAndLabelComponentIdFromPath(directPathToChild ?? []) as any,
     [directPathToChild],
   );
 
@@ -244,6 +238,96 @@ const ChartHolder: React.FC<ChartHolderProps> = ({
     }));
   }, []);
 
+  const renderChild = useCallback(
+    ({ dragSourceRef }) => (
+      <ResizableContainer
+        id={component.id}
+        adjustableWidth={parentComponent.type === ROW_TYPE}
+        adjustableHeight
+        widthStep={columnWidth}
+        widthMultiple={widthMultiple}
+        heightStep={GRID_BASE_UNIT}
+        heightMultiple={component.meta.height}
+        minWidthMultiple={GRID_MIN_COLUMN_COUNT}
+        minHeightMultiple={GRID_MIN_ROW_UNITS}
+        maxWidthMultiple={availableColumnCount + widthMultiple}
+        onResizeStart={onResizeStart}
+        onResize={onResize}
+        onResizeStop={onResizeStop}
+        editMode={editMode}
+      >
+        <div
+          ref={dragSourceRef}
+          data-test="dashboard-component-chart-holder"
+          style={focusHighlightStyles}
+          css={isFullSize ? fullSizeStyle : undefined}
+          className={cx(
+            'dashboard-component',
+            'dashboard-component-chart-holder',
+            // The following class is added to support custom dashboard styling via the CSS editor
+            `dashboard-chart-id-${chartId}`,
+            outlinedComponentId ? 'fade-in' : 'fade-out',
+          )}
+        >
+          {!editMode && (
+            <AnchorLink
+              id={component.id}
+              scrollIntoView={outlinedComponentId === component.id}
+            />
+          )}
+          {!!outlinedComponentId && (
+            <style>
+              {`label[for=${outlinedColumnName}] + .Select .Select__control {
+                    border-color: #00736a;
+                    transition: border-color 1s ease-in-out;
+                  }`}
+            </style>
+          )}
+          <Chart
+            componentId={component.id}
+            id={component.meta.chartId}
+            dashboardId={dashboardId}
+            width={chartWidth}
+            height={chartHeight}
+            sliceName={
+              component.meta.sliceNameOverride || component.meta.sliceName || ''
+            }
+            updateSliceName={handleUpdateSliceName}
+            isComponentVisible={isComponentVisible}
+            handleToggleFullSize={handleToggleFullSize}
+            isFullSize={isFullSize}
+            setControlValue={handleExtraControl}
+            extraControls={extraControls}
+            isInView={isInView}
+          />
+          {editMode && (
+            <HoverMenu position="top">
+              <div data-test="dashboard-delete-component-button">
+                <DeleteComponentButton onDelete={handleDeleteComponent} />
+              </div>
+            </HoverMenu>
+          )}
+        </div>
+      </ResizableContainer>
+    ),
+    [
+      component,
+      columnWidth,
+      editMode,
+      extraControls,
+      focusHighlightStyles,
+      handleDeleteComponent,
+      handleExtraControl,
+      handleToggleFullSize,
+      handleUpdateSliceName,
+      isComponentVisible,
+      isInView,
+      isFullSize,
+      outlinedComponentId,
+      outlinedColumnName,
+    ],
+  );
+
   return (
     <Draggable
       component={component}
@@ -255,81 +339,9 @@ const ChartHolder: React.FC<ChartHolderProps> = ({
       disableDragDrop={false}
       editMode={editMode}
     >
-      {({ dragSourceRef }) => (
-        <ResizableContainer
-          id={component.id}
-          adjustableWidth={parentComponent.type === ROW_TYPE}
-          adjustableHeight
-          widthStep={columnWidth}
-          widthMultiple={widthMultiple}
-          heightStep={GRID_BASE_UNIT}
-          heightMultiple={component.meta.height}
-          minWidthMultiple={GRID_MIN_COLUMN_COUNT}
-          minHeightMultiple={GRID_MIN_ROW_UNITS}
-          maxWidthMultiple={availableColumnCount + widthMultiple}
-          onResizeStart={onResizeStart}
-          onResize={onResize}
-          onResizeStop={onResizeStop}
-          editMode={editMode}
-        >
-          <div
-            ref={dragSourceRef}
-            data-test="dashboard-component-chart-holder"
-            style={focusHighlightStyles}
-            css={isFullSize ? fullSizeStyle : undefined}
-            className={cx(
-              'dashboard-component',
-              'dashboard-component-chart-holder',
-              // The following class is added to support custom dashboard styling via the CSS editor
-              `dashboard-chart-id-${chartId}`,
-              outlinedComponentId ? 'fade-in' : 'fade-out',
-            )}
-          >
-            {!editMode && (
-              <AnchorLink
-                id={component.id}
-                scrollIntoView={outlinedComponentId === component.id}
-              />
-            )}
-            {!!outlinedComponentId && (
-              <style>
-                {`label[for=${outlinedColumnName}] + .Select .Select__control {
-                    border-color: #00736a;
-                    transition: border-color 1s ease-in-out;
-                  }`}
-              </style>
-            )}
-            <Chart
-              componentId={component.id}
-              id={component.meta.chartId}
-              dashboardId={dashboardId}
-              width={chartWidth}
-              height={chartHeight}
-              sliceName={
-                component.meta.sliceNameOverride ||
-                component.meta.sliceName ||
-                ''
-              }
-              updateSliceName={handleUpdateSliceName}
-              isComponentVisible={isComponentVisible}
-              handleToggleFullSize={handleToggleFullSize}
-              isFullSize={isFullSize}
-              setControlValue={handleExtraControl}
-              extraControls={extraControls}
-              isInView={isInView}
-            />
-            {editMode && (
-              <HoverMenu position="top">
-                <div data-test="dashboard-delete-component-button">
-                  <DeleteComponentButton onDelete={handleDeleteComponent} />
-                </div>
-              </HoverMenu>
-            )}
-          </div>
-        </ResizableContainer>
-      )}
+      {renderChild}
     </Draggable>
   );
 };
 
-export default ChartHolder;
+export default memo(ChartHolder);
