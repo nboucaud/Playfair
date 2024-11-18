@@ -26,6 +26,7 @@ In order to do that, we reproduce the post-processing in Python
 for these chart types.
 """
 
+import superset_config
 from io import StringIO
 from typing import Any, Optional, TYPE_CHECKING, Union
 
@@ -327,8 +328,11 @@ def apply_post_process(
         if query["result_format"] == ChartDataResultFormat.JSON:
             df = pd.DataFrame.from_dict(data)
         elif query["result_format"] == ChartDataResultFormat.CSV:
-            df = pd.read_csv(StringIO(data))
-
+            df = pd.read_csv(StringIO(data), 
+                             delimiter=superset_config.CSV_EXPORT.get('sep'),
+                             encoding=superset_config.CSV_EXPORT.get('encoding'),
+                             decimal=superset_config.CSV_EXPORT.get('decimal'))
+            
         # convert all columns to verbose (label) name
         if datasource:
             df.rename(columns=datasource.data["verbose_map"], inplace=True)
