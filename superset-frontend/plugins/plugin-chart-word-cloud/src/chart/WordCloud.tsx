@@ -29,7 +29,7 @@ import {
   SupersetThemeProps,
   withTheme,
   seed,
-  CategoricalColorScale,
+  CategoricalColorNamespace,
 } from '@superset-ui/core';
 import { isEqual } from 'lodash';
 
@@ -67,6 +67,7 @@ export interface WordCloudProps extends WordCloudVisualProps {
   width: number;
   sliceId: number;
   colorScheme: string;
+  ownColorScheme: string;
 }
 
 export interface WordCloudState {
@@ -222,7 +223,8 @@ class WordCloud extends PureComponent<FullWordCloudProps, WordCloudState> {
 
   render() {
     const { scaleFactor } = this.state;
-    const { width, height, encoding, sliceId, colorScheme } = this.props;
+    const { width, height, encoding, sliceId, colorScheme, ownColorScheme } =
+      this.props;
     const { words } = this.state;
 
     // @ts-ignore
@@ -230,7 +232,10 @@ class WordCloud extends PureComponent<FullWordCloudProps, WordCloudState> {
     encoder.channels.color.setDomainFromDataset(words);
 
     const { getValueFromDatum } = encoder.channels.color;
-    const colorFn = encoder.channels.color.scale as CategoricalColorScale;
+    const colorFn = CategoricalColorNamespace.getScale(
+      colorScheme,
+      ownColorScheme,
+    );
 
     const viewBoxWidth = width * scaleFactor;
     const viewBoxHeight = height * scaleFactor;
@@ -250,11 +255,7 @@ class WordCloud extends PureComponent<FullWordCloudProps, WordCloudState> {
               fontSize={`${w.size}px`}
               fontWeight={w.weight}
               fontFamily={w.font}
-              fill={colorFn(
-                getValueFromDatum(w) as string,
-                sliceId,
-                colorScheme,
-              )}
+              fill={colorFn(getValueFromDatum(w) as string, sliceId)}
               textAnchor="middle"
               transform={`translate(${w.x}, ${w.y}) rotate(${w.rotate})`}
             >

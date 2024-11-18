@@ -47,6 +47,8 @@ import { loadTags } from 'src/components/Tags/utils';
 import { applyColors, getColorNamespace } from 'src/utils/colorScheme';
 import getOwnerName from 'src/utils/getOwnerName';
 import Owner from 'src/types/Owner';
+import { useDispatch } from 'react-redux';
+import { setColorScheme } from 'src/dashboard/actions/dashboardState';
 
 const StyledFormItem = styled(FormItem)`
   margin-bottom: 0;
@@ -84,6 +86,7 @@ type DashboardInfo = {
   certifiedBy: string;
   certificationDetails: string;
   isManagedExternally: boolean;
+  metadata: Record<string, any>;
 };
 
 const PropertiesModal = ({
@@ -98,10 +101,11 @@ const PropertiesModal = ({
   onSubmit = () => {},
   show = false,
 }: PropertiesModalProps) => {
+  const dispatch = useDispatch();
   const [form] = AntdForm.useForm();
   const [isLoading, setIsLoading] = useState(false);
   const [isAdvancedOpen, setIsAdvancedOpen] = useState(false);
-  const [colorScheme, setColorScheme] = useState(currentColorScheme);
+  const [colorScheme, setCurrentColorScheme] = useState(currentColorScheme);
   const [jsonMetadata, setJsonMetadata] = useState('');
   const [dashboardInfo, setDashboardInfo] = useState<DashboardInfo>();
   const [owners, setOwners] = useState<Owners>([]);
@@ -182,17 +186,19 @@ const PropertiesModal = ({
         certifiedBy: certified_by || '',
         certificationDetails: certification_details || '',
         isManagedExternally: is_managed_externally || false,
+        metadata,
       };
 
       form.setFieldsValue(dashboardInfo);
       setDashboardInfo(dashboardInfo);
       setOwners(owners);
       setRoles(roles);
-      setColorScheme(metadata.color_scheme);
+      setCurrentColorScheme(metadata.color_scheme);
 
       const metaDataCopy = omit(metadata, [
         'positions',
         'shared_label_colors',
+        'map_label_colors',
         'color_scheme_domain',
       ]);
 
@@ -269,6 +275,17 @@ const PropertiesModal = ({
     return parsedRoles;
   };
 
+  const handleOnCancel = () => {
+    const prevColorScheme = dashboardInfo?.metadata?.color_scheme;
+    if (dashboardInfo?.metadata && prevColorScheme !== currentColorScheme) {
+      applyColors(dashboardInfo?.metadata, true);
+      // always apply first and then dispatch
+      // to leverage plugins re-rendering process
+      dispatch(setColorScheme(prevColorScheme));
+    }
+    onHide();
+  };
+
   const onColorSchemeChange = (
     colorScheme = '',
     { updateMetadata = true } = {},
@@ -294,13 +311,20 @@ const PropertiesModal = ({
 
       setJsonMetadata(jsonStringify(jsonMetadataObj));
     }
-    setColorScheme(colorScheme);
+
+    setCurrentColorScheme(colorScheme);
+
+    if (colorScheme !== currentColorScheme) {
+      // always apply first and then dispatch
+      // to leverage plugins re-rendering process
+      applyColors(jsonMetadataObj, true);
+      dispatch(setColorScheme(colorScheme));
+    }
   };
 
   const onFinish = () => {
     const { title, slug, certifiedBy, certificationDetails } =
       form.getFieldsValue();
-    let currentColorScheme = colorScheme;
     let currentJsonMetadata = jsonMetadata;
 
     // validate currentJsonMetadata
@@ -318,28 +342,34 @@ const PropertiesModal = ({
       return;
     }
 
-    const copyMetadata = { ...metadata };
     const colorNamespace = getColorNamespace(metadata?.color_namespace);
-
     // color scheme in json metadata has precedence over selection
-    currentColorScheme = metadata?.color_scheme || colorScheme;
+    const updatedColorScheme = metadata?.color_scheme || colorScheme;
 
     // remove information from user facing input
     if (metadata?.shared_label_colors) {
       delete metadata.shared_label_colors;
     }
+    if (metadata?.map_label_colors) {
+      delete metadata.map_label_colors;
+    }
     if (metadata?.color_scheme_domain) {
       delete metadata.color_scheme_domain;
     }
 
-    // only apply colors, the user has not saved yet
-    applyColors(copyMetadata, true);
+    applyColors(
+      {
+        ...metadata,
+        color_scheme: updatedColorScheme,
+      },
+      true,
+    );
 
-    currentJsonMetadata = jsonStringify(metadata);
-
-    onColorSchemeChange(currentColorScheme, {
+    onColorSchemeChange(updatedColorScheme, {
       updateMetadata: false,
     });
+
+    currentJsonMetadata = jsonStringify(metadata);
 
     const moreOnSubmitProps: { roles?: Roles } = {};
     const morePutProps: { roles?: number[]; tags?: (number | undefined)[] } =
@@ -557,14 +587,14 @@ const PropertiesModal = ({
   return (
     <Modal
       show={show}
-      onHide={onHide}
+      onHide={handleOnCancel}
       title={t('Dashboard properties')}
       footer={
         <>
           <Button
             htmlType="button"
             buttonSize="small"
-            onClick={onHide}
+            onClick={handleOnCancel}
             data-test="properties-modal-cancel-button"
             cta
           >

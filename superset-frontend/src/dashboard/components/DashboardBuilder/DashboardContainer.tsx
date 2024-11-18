@@ -31,6 +31,7 @@ import { pick } from 'lodash';
 import Tabs from 'src/components/Tabs';
 import DashboardGrid from 'src/dashboard/containers/DashboardGrid';
 import {
+  Chart,
   DashboardInfo,
   DashboardLayout,
   LayoutItem,
@@ -44,11 +45,7 @@ import { getChartIdsInFilterScope } from 'src/dashboard/util/getChartIdsInFilter
 import findTabIndexByComponentId from 'src/dashboard/util/findTabIndexByComponentId';
 import { setInScopeStatusOfFilters } from 'src/dashboard/actions/nativeFilters';
 import { updateDashboardLabelsColor } from 'src/dashboard/actions/dashboardState';
-import {
-  applyColors,
-  getColorNamespace,
-  resetColors,
-} from 'src/utils/colorScheme';
+import { getColorNamespace, resetColors } from 'src/utils/colorScheme';
 import { NATIVE_FILTER_DIVIDER_PREFIX } from '../nativeFilters/FiltersConfigModal/utils';
 import { findTabsWithChartsInScope } from '../nativeFilters/utils';
 import { getRootLevelTabsComponent } from './utils';
@@ -85,8 +82,21 @@ const DashboardContainer: FC<DashboardContainerProps> = ({ topLevelTabs }) => {
   const directPathToChild = useSelector<RootState, string[]>(
     state => state.dashboardState.directPathToChild,
   );
-  const chartIds = useSelector<RootState, number[]>(state =>
-    Object.values(state.charts).map(chart => chart.id),
+  const isEditMode = useSelector<RootState, boolean>(
+    state => state.dashboardState.editMode,
+  );
+  const charts = useSelector<RootState, Chart[]>(state =>
+    Object.values(state.charts),
+  );
+  const renderedChartIds = useSelector<RootState, number[]>(state =>
+    Object.values(state.charts)
+      .filter(chart => chart.chartStatus === 'rendered')
+      .map(chart => chart.id),
+  );
+  const prevNumRenderedCharts = useRef<number>(0);
+  const chartIds: number[] = useMemo(
+    () => charts.map(chart => chart.id),
+    [charts],
   );
 
   const prevTabIndexRef = useRef();
@@ -142,11 +152,18 @@ const DashboardContainer: FC<DashboardContainerProps> = ({ topLevelTabs }) => {
 
   useEffect(() => {
     // verify freshness of color map on tab change
-    // and when loading for first time
-    setTimeout(() => {
+    // and when loading the dashboard for first time
+    const numRenderedCharts = renderedChartIds.length;
+
+    if (
+      !isEditMode &&
+      numRenderedCharts > 0 &&
+      prevNumRenderedCharts.current !== numRenderedCharts
+    ) {
+      prevNumRenderedCharts.current = numRenderedCharts;
       dispatch(updateDashboardLabelsColor());
-    }, 500);
-  }, [directPathToChild, dispatch]);
+    }
+  }, [renderedChartIds, dispatch, isEditMode]);
 
   useEffect(() => {
     const labelsColorMap = getLabelsColorMap();
@@ -155,10 +172,11 @@ const DashboardContainer: FC<DashboardContainerProps> = ({ topLevelTabs }) => {
     );
     labelsColorMap.source = LabelsColorMapSource.Dashboard;
     // apply labels color as dictated by stored metadata
-    applyColors(dashboardInfo.metadata);
+    dispatch(updateDashboardLabelsColor());
 
     return () => {
       resetColors(getColorNamespace(colorNamespace));
+      prevNumRenderedCharts.current = 0;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [dashboardInfo.id, dispatch]);

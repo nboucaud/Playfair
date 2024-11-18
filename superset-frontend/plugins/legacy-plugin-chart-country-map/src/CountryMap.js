@@ -37,6 +37,8 @@ const propTypes = {
   width: PropTypes.number,
   height: PropTypes.number,
   country: PropTypes.string,
+  colorScheme: PropTypes.string,
+  ownColorScheme: PropTypes.string,
   linearColorScheme: PropTypes.string,
   mapBaseUrl: PropTypes.string,
   numberFormat: PropTypes.string,
@@ -53,6 +55,7 @@ function CountryMap(element, props) {
     linearColorScheme,
     numberFormat,
     colorScheme,
+    ownColorScheme,
     sliceId,
   } = props;
 
@@ -61,11 +64,15 @@ function CountryMap(element, props) {
   const linearColorScale = getSequentialSchemeRegistry()
     .get(linearColorScheme)
     .createLinearScale(d3Extent(data, v => v.metric));
-  const colorScale = CategoricalColorNamespace.getScale(colorScheme);
+  const appliedScheme = colorScheme || ownColorScheme;
+  const colorScale = CategoricalColorNamespace.getScale(
+    appliedScheme,
+    ownColorScheme,
+  );
 
   const colorMap = {};
   data.forEach(d => {
-    colorMap[d.country_id] = colorScheme
+    colorMap[d.country_id] = appliedScheme
       ? colorScale(d.country_id, sliceId)
       : linearColorScale(d.metric);
   });

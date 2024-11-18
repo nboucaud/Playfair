@@ -38,6 +38,7 @@ export default function transformProps(chartProps: ChartProps): WordCloudProps {
   const { width, height, formData, queriesData } = chartProps;
   const {
     colorScheme,
+    ownColorScheme,
     metric,
     rotation,
     series,
@@ -81,5 +82,6 @@ export default function transformProps(chartProps: ChartProps): WordCloudProps {
     width,
     sliceId,
     colorScheme,
+    ownColorScheme,
   };
 }

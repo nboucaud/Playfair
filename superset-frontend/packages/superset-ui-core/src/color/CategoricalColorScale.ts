@@ -21,14 +21,16 @@ import { scaleOrdinal, ScaleOrdinal } from 'd3-scale';
 import { ExtensibleFunction } from '../models';
 import { ColorsInitLookup, ColorsLookup } from './types';
 import stringifyAndTrim from './stringifyAndTrim';
-import getLabelsColorMap from './LabelsColorMapSingleton';
+import getLabelsColorMap, {
+  LabelsColorMapSource,
+} from './LabelsColorMapSingleton';
 import { getAnalogousColors } from './utils';
 import { FeatureFlag, isFeatureEnabled } from '../utils';
 
 // Use type augmentation to correct the fact that
 // an instance of CategoricalScale is also a function
 interface CategoricalColorScale {
-  (x: { toString(): string }, y?: number, w?: string): string;
+  (x: { toString(): string }, y?: number): string;
 }
 
 class CategoricalColorScale extends ExtensibleFunction {
@@ -50,11 +52,18 @@ class CategoricalColorScale extends ExtensibleFunction {
    * Constructor
    * @param {*} colors an array of colors
    * @param {*} forcedColors optional parameter that comes from parent
-   * (usually CategoricalColorNamespace)
+   * @param {*} appliedColorScheme the color scheme applied to the chart
+   * @param {*} ownColorScheme the original color scheme of the chart
+   *
    */
-  constructor(colors: string[], forcedColors: ColorsInitLookup = {}) {
-    super((value: string, sliceId?: number, colorScheme?: string) =>
-      this.getColor(value, sliceId, colorScheme),
+  constructor(
+    colors: string[],
+    forcedColors: ColorsInitLookup = {},
+    appliedColorScheme?: string,
+    ownColorScheme?: string,
+  ) {
+    super((value: string, sliceId?: number) =>
+      this.getColor(value, sliceId, appliedColorScheme, ownColorScheme),
     );
     // holds original color scheme colors
     this.originColors = colors;
@@ -107,15 +116,30 @@ class CategoricalColorScale extends ExtensibleFunction {
    *
    * @param value the value of a label to get the color for
    * @param sliceId the ID of the current chart
-   * @param colorScheme the original color scheme of the chart
+   * @param appliedColorScheme the color scheme applied to the chart
+   * @param ownColorScheme the original color scheme of the chart
    * @returns the color or the next available color
    */
-  getColor(value?: string, sliceId?: number, colorScheme?: string): string {
+  getColor(
+    value?: string,
+    sliceId?: number,
+    appliedColorScheme?: string,
+    ownColorScheme?: string,
+  ): string {
     const cleanedValue = stringifyAndTrim(value);
-    // priority: forced color (i.e. custom label colors) > shared color > scale color
+    // priority: forced color (aka custom label colors) > shared color > scale color
     const forcedColor = this.forcedColors?.[cleanedValue];
-    const isExistingLabel = this.chartLabelsColorMap.has(cleanedValue);
-    let color = forcedColor || this.scale(cleanedValue);
+    const { source } = this.labelsColorMapInstance;
+    const currentColorMap =
+      source === LabelsColorMapSource.Dashboard
+        ? this.labelsColorMapInstance.getColorMap()
+        : this.chartLabelsColorMap;
+    const isExistingLabel = currentColorMap.has(cleanedValue);
+    let color =
+      forcedColor ||
+      (isExistingLabel
+        ? (currentColorMap.get(cleanedValue) as string)
+        : this.scale(cleanedValue));
 
     // a forced color will always be used independently of the usage count
     if (!forcedColor && !isExistingLabel) {
@@ -141,7 +165,8 @@ class CategoricalColorScale extends ExtensibleFunction {
         cleanedValue,
         color,
         sliceId,
-        colorScheme,
+        appliedColorScheme,
+        ownColorScheme,
       );
     }
     return color;
