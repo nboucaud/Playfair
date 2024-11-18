@@ -40,4 +40,5 @@ export interface DashboardContextForExplore {
       }
     | {};
   isRedundant?: boolean;
+  dashboardPageId?: string;
 }

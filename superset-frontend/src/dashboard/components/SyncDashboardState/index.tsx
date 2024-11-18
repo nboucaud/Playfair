@@ -52,7 +52,7 @@ const updateDashboardTabLocalStorage = (
   const dashboardsContexts = getDashboardContextLocalStorage();
   setItem(LocalStorageKeys.DashboardExploreContext, {
     ...dashboardsContexts,
-    [dashboardPageId]: dashboardContext,
+    [dashboardPageId]: { ...dashboardContext, dashboardPageId },
   });
 };
 
@@ -61,7 +61,7 @@ const selectDashboardContextForExplore = createSelector(
     (state: RootState) => state.dashboardInfo.metadata,
     (state: RootState) => state.dashboardInfo.id,
     (state: RootState) => state.dashboardState?.colorScheme,
-    (state: RootState) => state.nativeFilters.filters,
+    (state: RootState) => state.nativeFilters?.filters,
     (state: RootState) => state.dataMask,
   ],
   (metadata, dashboardId, colorScheme, filters, dataMask) => {
@@ -72,10 +72,10 @@ const selectDashboardContextForExplore = createSelector(
     }, {});
 
     return {
-      labelsColor: metadata.label_colors || EMPTY_OBJECT,
-      labelsColorMap: metadata.shared_label_colors || EMPTY_OBJECT,
+      labelsColor: metadata?.label_colors || EMPTY_OBJECT,
+      labelsColorMap: metadata?.shared_label_colors || EMPTY_OBJECT,
       colorScheme,
-      chartConfiguration: metadata.chart_configuration || EMPTY_OBJECT,
+      chartConfiguration: metadata?.chart_configuration || EMPTY_OBJECT,
       nativeFilters: optimizedNativeFilters,
       dataMask,
       dashboardId,
