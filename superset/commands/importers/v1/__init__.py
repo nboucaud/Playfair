@@ -61,7 +61,13 @@ class ImportModelsCommand(BaseCommand):
         self._configs: dict[str, Any] = {}
 
     @staticmethod
-    def _import(configs: dict[str, Any], overwrite: bool = False) -> None:
+    def _import(
+        configs: dict[str, Any],
+        overwrite: bool = False,
+        contents: Optional[
+            dict[str, Any]
+        ] = None,  # Use dict[str, str] to match the parent class signature
+    ) -> None:
         raise NotImplementedError("Subclasses MUST implement _import")
 
     @classmethod
@@ -73,7 +79,7 @@ class ImportModelsCommand(BaseCommand):
         self.validate()
 
         try:
-            self._import(self._configs, self.overwrite)
+            self._import(self._configs, self.overwrite, self.contents)
         except CommandException:
             raise
         except Exception as ex:

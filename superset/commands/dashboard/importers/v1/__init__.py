@@ -15,7 +15,7 @@
 # specific language governing permissions and limitations
 # under the License.
 
-from typing import Any
+from typing import Any, Optional
 
 from marshmallow import Schema
 from sqlalchemy.orm import Session  # noqa: F401
@@ -34,10 +34,12 @@ from superset.commands.dashboard.importers.v1.utils import (
 from superset.commands.database.importers.v1.utils import import_database
 from superset.commands.dataset.importers.v1.utils import import_dataset
 from superset.commands.importers.v1 import ImportModelsCommand
+from superset.commands.importers.v1.utils import import_tag
 from superset.daos.dashboard import DashboardDAO
 from superset.dashboards.schemas import ImportV1DashboardSchema
 from superset.databases.schemas import ImportV1DatabaseSchema
 from superset.datasets.schemas import ImportV1DatasetSchema
+from superset.extensions import feature_flag_manager
 from superset.migrations.shared.native_filters import migrate_dashboard
 from superset.models.dashboard import Dashboard, dashboard_slices
 
@@ -57,9 +59,15 @@ class ImportDashboardsCommand(ImportModelsCommand):
     import_error = DashboardImportError
 
     # TODO (betodealmeida): refactor to use code from other commands
-    # pylint: disable=too-many-branches, too-many-locals
+    # pylint: disable=too-many-branches, too-many-locals, too-many-statements
     @staticmethod
-    def _import(configs: dict[str, Any], overwrite: bool = False) -> None:
+    def _import(
+        configs: dict[str, Any],
+        overwrite: bool = False,
+        contents: Optional[dict[str, Any]] = None,
+    ) -> None:
+        if contents is None:
+            contents = {}
         # discover charts and datasets associated with dashboards
         chart_uuids: set[str] = set()
         dataset_uuids: set[str] = set()
@@ -123,6 +131,14 @@ class ImportDashboardsCommand(ImportModelsCommand):
                 charts.append(chart)
                 chart_ids[str(chart.uuid)] = chart.id
 
+                # Handle tags using import_tag function
+                if feature_flag_manager.is_feature_enabled("TAGGING_SYSTEM"):
+                    if "tags" in config:
+                        new_tag_names = config["tags"]
+                        import_tag(
+                            new_tag_names, contents, chart.id, "chart", db.session
+                        )
+
         # store the existing relationship between dashboards and charts
         existing_relationships = db.session.execute(
             select([dashboard_slices.c.dashboard_id, dashboard_slices.c.slice_id])
@@ -142,6 +158,18 @@ class ImportDashboardsCommand(ImportModelsCommand):
                     chart_id = chart_ids[uuid]
                     if (dashboard.id, chart_id) not in existing_relationships:
                         dashboard_chart_ids.append((dashboard.id, chart_id))
+
+                # Handle tags using import_tag function
+                if feature_flag_manager.is_feature_enabled("TAGGING_SYSTEM"):
+                    if "tags" in config:
+                        new_tag_names = config["tags"]
+                        import_tag(
+                            new_tag_names,
+                            contents,
+                            dashboard.id,
+                            "dashboard",
+                            db.session,
+                        )
 
         # set ref in the dashboard_slices table
         values = [
